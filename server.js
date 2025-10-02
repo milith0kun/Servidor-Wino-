@@ -155,7 +155,19 @@ async function initializeNgrok() {
         return url;
     } catch (error) {
         console.error('❌ Error configurando ngrok:', error.message);
-        console.log('⚠️  Continuando sin túnel público...');
+        
+        // Detectar errores específicos de ngrok
+        if (error.message.includes('tunnel session') || error.message.includes('account limit')) {
+            console.log('\n⚠️  ADVERTENCIA: Ya tienes un túnel ngrok activo en otro proyecto');
+            console.log('📝 SOLUCIONES:');
+            console.log('   1. Cierra el otro proyecto que usa ngrok');
+            console.log('   2. Usa un token diferente (crea uno gratis en: https://dashboard.ngrok.com)');
+            console.log('   3. Actualiza a un plan de pago para múltiples túneles simultáneos');
+            console.log('   4. Accede directamente con la IP pública: http://18.220.8.226:3000\n');
+        }
+        
+        console.log('⚠️  El servidor funcionará SOLO LOCALMENTE sin ngrok');
+        console.log(`🌐 Acceso directo: http://18.220.8.226:${PORT}\n`);
         return null;
     }
 }
@@ -185,10 +197,18 @@ const startServer = async () => {
                     if (publicUrl) {
                         console.log('✅ SERVIDOR COMPLETAMENTE CONFIGURADO ✅');
                         console.log('==========================================');
-                        console.log(`🌍 URL PÚBLICA: ${publicUrl}`);
+                        console.log(`🌍 URL PÚBLICA NGROK: ${publicUrl}`);
+                        console.log(`🏠 URL Local: http://localhost:${PORT}`);
+                        console.log(`🌐 IP Pública AWS: http://18.220.8.226:${PORT}`);
+                        console.log('==========================================\n');
+                        console.log('📱 Usa cualquiera de estas URLs para conectar desde dispositivos\n');
+                    } else {
+                        console.log('⚠️  NGROK NO DISPONIBLE (probablemente ya está en uso)');
+                        console.log('==========================================');
+                        console.log(`🌐 Acceso directo por IP: http://18.220.8.226:${PORT}`);
                         console.log(`🏠 URL Local: http://localhost:${PORT}`);
                         console.log('==========================================\n');
-                        console.log('📱 Usa la URL pública para conectar desde cualquier dispositivo\n');
+                        console.log('💡 Puedes usar la IP pública directamente si el puerto está abierto en AWS\n');
                     }
                 } catch (ngrokError) {
                     console.error('❌ Error iniciando ngrok:', ngrokError);
@@ -196,6 +216,7 @@ const startServer = async () => {
                 }
             } else {
                 console.log('⚠️  No se encontró token de ngrok, servidor solo local\n');
+                console.log(`🌐 Acceso directo: http://18.220.8.226:${PORT}\n`);
             }
         });
 
