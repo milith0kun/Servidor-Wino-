@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const ngrok = require('ngrok');
+const ngrok = require('@ngrok/ngrok');
 const { initializeDatabase } = require('./utils/database');
 const { config, displayConfig } = require('./config-app-universal');
 
@@ -130,15 +130,14 @@ async function initializeNgrok() {
     try {
         console.log('🔄 Configurando túnel ngrok...');
         
-        // Configurar ngrok con el token
-        await ngrok.authtoken(NGROK_TOKEN);
-        
-        // Crear el túnel HTTP con HTTPS forzado
-        const url = await ngrok.connect({
-            port: PORT,
-            proto: 'http',
-            bind_tls: true // Forzar HTTPS
+        // Crear el túnel con el nuevo SDK de ngrok
+        const listener = await ngrok.forward({
+            addr: PORT,
+            authtoken: NGROK_TOKEN,
+            proto: 'http'
         });
+        
+        const url = listener.url();
         
         console.log('\n🌐 ¡NGROK CONFIGURADO EXITOSAMENTE! 🌐');
         console.log('================================================');
@@ -198,7 +197,7 @@ const startServer = async () => {
         const gracefulShutdown = async () => {
             console.log('\n🛑 Cerrando servidor...');
             try {
-                await ngrok.kill();
+                await ngrok.disconnect();
                 console.log('✅ Ngrok cerrado');
             } catch (error) {
                 console.log('⚠️  Error cerrando ngrok:', error.message);
