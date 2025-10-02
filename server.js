@@ -20,17 +20,32 @@ let DETECTED_PORT = null;
 // Función para detectar si estamos en AWS
 async function detectEnvironment() {
     try {
-        // Intentar obtener metadata de AWS EC2
-        const response = await axios.get('http://169.254.169.254/latest/meta-data/public-ipv4', {
-            timeout: 2000,
-            headers: { 'X-aws-ec2-metadata-token-ttl-seconds': '21600' }
-        });
+        // Paso 1: Obtener token IMDSv2 para AWS EC2
+        const tokenResponse = await axios.put(
+            'http://169.254.169.254/latest/api/token',
+            null,
+            {
+                timeout: 2000,
+                headers: { 'X-aws-ec2-metadata-token-ttl-seconds': '21600' }
+            }
+        );
         
-        if (response.data && /^(\d{1,3}\.){3}\d{1,3}$/.test(response.data)) {
-            return { isAWS: true, ip: response.data.trim() };
+        const token = tokenResponse.data;
+        
+        // Paso 2: Usar el token para obtener la IP pública
+        const ipResponse = await axios.get(
+            'http://169.254.169.254/latest/meta-data/public-ipv4',
+            {
+                timeout: 2000,
+                headers: { 'X-aws-ec2-metadata-token': token }
+            }
+        );
+        
+        if (ipResponse.data && /^(\d{1,3}\.){3}\d{1,3}$/.test(ipResponse.data)) {
+            return { isAWS: true, ip: ipResponse.data.trim() };
         }
     } catch (error) {
-        // No es AWS o no tiene acceso a metadata
+        // No es AWS o no tiene acceso a metadata (error 404 o timeout)
     }
     return { isAWS: false, ip: null };
 }
