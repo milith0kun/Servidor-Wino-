@@ -52,13 +52,13 @@ async function detectEnvironment() {
 
 // Función para detectar puerto disponible automáticamente
 async function detectAvailablePort() {
-    // Usar puerto 3000 siempre - simple y funcional
-    // En producción, usar proxy inverso (nginx) o load balancer para puerto 80
-    return 3000;
+    // Detectar puerto desde .env o usar 80 por defecto (puerto HTTP estándar)
+    const port = process.env.EXTERNAL_PORT || process.env.PORT || 80;
+    return parseInt(port);
 }
 
 // Configuración inicial del puerto (se actualizará automáticamente al iniciar)
-let PORT = process.env.PORT || 3000;
+let PORT = process.env.EXTERNAL_PORT || process.env.PORT || 80;
 const HOST = process.env.HOST || config.server.host || '0.0.0.0';
 
 // Token de ngrok desde variables de entorno
