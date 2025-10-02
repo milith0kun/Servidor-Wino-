@@ -50,7 +50,33 @@ async function detectEnvironment() {
     return { isAWS: false, ip: null };
 }
 
-// Configuración del puerto - SIEMPRE 3000 (en AWS con iptables redirigiendo 80->3000)
+// Función para detectar puerto disponible automáticamente
+async function detectAvailablePort() {
+    const net = require('net');
+    const portsToTry = [80, 3000]; // Probar 80 primero, luego 3000
+    
+    for (const port of portsToTry) {
+        const isAvailable = await new Promise((resolve) => {
+            const testServer = net.createServer();
+            
+            testServer.once('error', () => resolve(false));
+            testServer.once('listening', () => {
+                testServer.close();
+                resolve(true);
+            });
+            
+            testServer.listen(port, '0.0.0.0');
+        });
+        
+        if (isAvailable) {
+            return port;
+        }
+    }
+    
+    return 3000; // Puerto por defecto
+}
+
+// Configuración inicial del puerto (se actualizará automáticamente al iniciar)
 let PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || config.server.host || '0.0.0.0';
 
@@ -307,11 +333,13 @@ const startServer = async () => {
         // Detectar IP pública y entorno automáticamente
         PUBLIC_IP = await detectPublicIP();
         
-        // Configurar puerto según el entorno
-        // Siempre usa puerto 3000 (en AWS iptables redirige 80->3000 automáticamente)
+        // Detectar puerto disponible automáticamente
         if (!process.env.PORT) {
-            PORT = 3000;
-            console.log(`🔧 Puerto configurado: 3000 ${IS_AWS ? '(AWS: puerto 80 redirige aquí)' : '(LOCAL)'}`);
+            PORT = await detectAvailablePort();
+            console.log(`🔧 Puerto detectado automáticamente: ${PORT}`);
+        } else {
+            PORT = parseInt(process.env.PORT);
+            console.log(`🔧 Puerto configurado manualmente: ${PORT}`);
         }
         
         DETECTED_PORT = PORT;
@@ -323,18 +351,14 @@ const startServer = async () => {
         // Iniciar servidor en HOST y PORT configurados
         const server = app.listen(PORT, HOST, async () => {
             const ENVIRONMENT = IS_AWS ? 'AWS' : 'LOCAL';
-            // En AWS, el acceso público es por puerto 80 (iptables redirige automáticamente)
-            const PUBLIC_URL = IS_AWS ? `http://${PUBLIC_IP}` : `http://${PUBLIC_IP}:${PORT}`;
+            const PUBLIC_URL = `http://${PUBLIC_IP}${PORT === 80 ? '' : ':' + PORT}`;
             
             console.log(`\n🚀 SERVIDOR HACCP WINO INICIADO! 🚀`);
             console.log('==========================================');
             console.log(`📍 Entorno: ${ENVIRONMENT}`);
-            console.log(`🏠 Servidor Interno: ${HOST}:${PORT}`);
+            console.log(`🏠 Servidor: ${HOST}:${PORT}`);
             console.log(`🌐 IP Pública: ${PUBLIC_IP}`);
-            if (IS_AWS) {
-                console.log(`� Redirección Automática: Puerto 80 → ${PORT}`);
-            }
-            console.log(`🌍 URL Pública: ${PUBLIC_URL}`);
+            console.log(`🌍 URL Acceso: ${PUBLIC_URL}`);
             console.log(`🏥 Node ENV: ${process.env.NODE_ENV || 'development'}`);
             console.log(`📋 Health: ${PUBLIC_URL}/health`);
             console.log('==========================================\n');
@@ -365,7 +389,7 @@ const startServer = async () => {
                     console.log('==========================================\n');
                 }
             } else if (IS_AWS) {
-                console.log('📡 Servidor AWS - Acceso directo (iptables gestiona puerto 80)');
+                console.log('📡 Servidor AWS - Acceso directo por IP');
                 console.log('==========================================');
                 console.log(`🌐 URL Pública: ${PUBLIC_URL}`);
                 console.log('==========================================\n');
