@@ -162,15 +162,18 @@ function requireGPSValidation(required = true) {
     return async (req, res, next) => {
         try {
             const { latitud, longitud, metodo = 'MANUAL' } = req.body;
+            console.log(`🔍 GPS Validation - Método: ${metodo}, Lat: ${latitud}, Lon: ${longitud}, Required: ${required}`);
 
             // Si el método es MANUAL y GPS no es requerido, continuar
             if (metodo === 'MANUAL' && !required) {
+                console.log('✅ Método MANUAL y GPS no requerido - continuando');
                 return next();
             }
 
             // Si el método es GPS o GPS es requerido, validar
             if (metodo === 'GPS' || required) {
                 if (!latitud || !longitud) {
+                    console.log('❌ GPS_REQUERIDO - Faltan coordenadas');
                     // Obtener configuración GPS para mostrar en el error
                     const gpsConfig = await getGPSConfig();
                     
@@ -193,8 +196,10 @@ function requireGPSValidation(required = true) {
 
                 // Validar ubicación GPS (ahora es async)
                 const validation = await validateGPSLocation(latitud, longitud);
+                console.log(`📍 Validación GPS resultado:`, validation);
                 
                 if (!validation.isValid) {
+                    console.log(`❌ GPS FUERA DE RANGO - Distancia: ${validation.distance}m, Máximo: ${validation.maxDistance}m`);
                     return res.status(403).json({
                         success: false,
                         error: validation.error,
@@ -208,6 +213,7 @@ function requireGPSValidation(required = true) {
                     });
                 }
 
+                console.log(`✅ GPS VÁLIDO - Distancia: ${validation.distance}m`);
                 // Agregar información de validación al request
                 req.gpsValidation = validation;
             }
