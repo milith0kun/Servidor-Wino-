@@ -27,6 +27,7 @@ router.post('/entrada', authenticateToken, requireGPSValidation(true), (req, res
                 }
 
                 if (existingEntry) {
+                    console.log(`⚠️ Entrada ya existe para usuario ${usuarioId} en fecha ${fecha}`);
                     return res.status(400).json({
                         success: false,
                         error: 'Entrada ya registrada',
@@ -35,6 +36,7 @@ router.post('/entrada', authenticateToken, requireGPSValidation(true), (req, res
                 }
 
                 // Registrar nueva entrada con información GPS
+                console.log(`📝 Registrando entrada: Usuario ${usuarioId}, Fecha ${fecha}, Hora ${horaEntrada}`);
                 const insertQuery = `
                     INSERT INTO asistencia 
                     (usuario_id, fecha, hora_entrada, latitud, longitud, codigo_qr, metodo_fichado, observaciones)
@@ -46,18 +48,21 @@ router.post('/entrada', authenticateToken, requireGPSValidation(true), (req, res
                     req.gpsValidation ? `GPS validado - Distancia: ${req.gpsValidation.distance}m` : null
                 ].filter(Boolean).join(' | ');
 
+                console.log(`📌 Datos a insertar:`, { usuarioId, fecha, horaEntrada, latitud, longitud, metodo, observacionesCompletas });
+
                 db.run(
                     insertQuery,
                     [usuarioId, fecha, horaEntrada, latitud, longitud, codigo_qr, metodo, observacionesCompletas],
                     function(err) {
                         if (err) {
-                            console.error('Error registrando entrada:', err);
+                            console.error('❌ Error registrando entrada:', err);
                             return res.status(500).json({
                                 success: false,
                                 error: 'Error registrando entrada'
                             });
                         }
 
+                        console.log(`✅ Entrada registrada exitosamente! ID: ${this.lastID}`);
                         res.json({
                             success: true,
                             message: 'Entrada registrada correctamente',
