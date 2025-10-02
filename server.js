@@ -12,8 +12,32 @@ dotenv.config();
 
 const app = express();
 
-// Configuración flexible del servidor
-const PORT = process.env.PORT || config.server.port || 3000;
+// Variables globales para detección de entorno
+let PUBLIC_IP = null;
+let IS_AWS = false;
+let DETECTED_PORT = null;
+
+// Función para detectar si estamos en AWS
+async function detectEnvironment() {
+    try {
+        // Intentar obtener metadata de AWS EC2
+        const response = await axios.get('http://169.254.169.254/latest/meta-data/public-ipv4', {
+            timeout: 2000,
+            headers: { 'X-aws-ec2-metadata-token-ttl-seconds': '21600' }
+        });
+        
+        if (response.data && /^(\d{1,3}\.){3}\d{1,3}$/.test(response.data)) {
+            return { isAWS: true, ip: response.data.trim() };
+        }
+    } catch (error) {
+        // No es AWS o no tiene acceso a metadata
+    }
+    return { isAWS: false, ip: null };
+}
+
+// Configuración del puerto según el entorno
+// Se configurará dinámicamente después de detectar el entorno
+let PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || config.server.host || '0.0.0.0';
 
 // Token de ngrok desde variables de entorno
@@ -22,9 +46,6 @@ const NGROK_TOKEN = process.env.NGROK_TOKEN || '33UMqXLZCDRstqQg8xwAKRz0jBM_6Xop
 // Dominio estático de ngrok (opcional - requiere plan de pago)
 // Si no se especifica, ngrok generará una URL aleatoria diferente cada vez
 const NGROK_DOMAIN = process.env.NGROK_DOMAIN || null;
-
-// Variable para almacenar la IP pública detectada
-let PUBLIC_IP = null;
 
 // Configuración de CORS flexible para máxima compatibilidad
 const corsOptions = {
@@ -137,9 +158,21 @@ app.use('*', (req, res) => {
 // Función para detectar la IP pública automáticamente
 async function detectPublicIP() {
     try {
-        console.log('🔍 Detectando IP pública...');
+        console.log('🔍 Detectando entorno e IP pública...');
         
-        // Intentar obtener IP desde diferentes servicios
+        // Primero intentar detectar si estamos en AWS
+        const awsDetection = await detectEnvironment();
+        
+        if (awsDetection.isAWS && awsDetection.ip) {
+            console.log(`✅ Entorno AWS detectado`);
+            console.log(`✅ IP pública (AWS): ${awsDetection.ip}`);
+            IS_AWS = true;
+            return awsDetection.ip;
+        }
+        
+        console.log('📍 Entorno: LOCAL');
+        
+        // Si no es AWS, intentar obtener IP desde servicios públicos
         const services = [
             'https://api.ipify.org?format=json',
             'https://ifconfig.me/ip',
@@ -257,8 +290,19 @@ const startServer = async () => {
     try {
         console.log('🔄 Inicializando servidor HACCP Wino...');
         
-        // Detectar IP pública automáticamente
+        // Detectar IP pública y entorno automáticamente
         PUBLIC_IP = await detectPublicIP();
+        
+        // Configurar puerto según el entorno
+        if (IS_AWS && !process.env.PORT) {
+            PORT = 80;
+            console.log('🔧 Puerto configurado automáticamente a 80 (AWS)');
+        } else if (!IS_AWS && !process.env.PORT) {
+            PORT = 3000;
+            console.log('🔧 Puerto configurado automáticamente a 3000 (LOCAL)');
+        }
+        
+        DETECTED_PORT = PORT;
         
         console.log('📊 Inicializando base de datos...');
         await initializeDatabase();
@@ -266,46 +310,49 @@ const startServer = async () => {
 
         // Iniciar servidor en HOST y PORT configurados
         const server = app.listen(PORT, HOST, async () => {
+            const ENVIRONMENT = IS_AWS ? 'AWS' : 'LOCAL';
+            const ACCESS_URL = `http://${PUBLIC_IP}${PORT === 80 ? '' : ':' + PORT}`;
+            
             console.log(`\n🚀 SERVIDOR HACCP WINO INICIADO! 🚀`);
             console.log('==========================================');
+            console.log(`📍 Entorno: ${ENVIRONMENT}`);
             console.log(`🏠 Host: ${HOST}:${PORT}`);
-            console.log(`� IP Pública: ${PUBLIC_IP}`);
-            console.log(`�🏥 Entorno: ${process.env.NODE_ENV || 'development'}`);
-            console.log(`📋 Health: http://localhost:${PORT}/health`);
+            console.log(`🌐 IP Pública: ${PUBLIC_IP}`);
+            console.log(`🔌 Puerto: ${PORT} ${IS_AWS ? '(HTTP estándar)' : ''}`);
+            console.log(`� URL Acceso: ${ACCESS_URL}`);
+            console.log(`🏥 Node ENV: ${process.env.NODE_ENV || 'development'}`);
+            console.log(`📋 Health: ${ACCESS_URL}/health`);
             console.log('==========================================\n');
             
-            // Configurar ngrok automáticamente
-            if (NGROK_TOKEN) {
+            // Configurar ngrok automáticamente (solo en LOCAL)
+            if (NGROK_TOKEN && !IS_AWS) {
                 try {
                     const publicUrl = await initializeNgrok();
                     if (publicUrl) {
-                        console.log('✅ SERVIDOR COMPLETAMENTE CONFIGURADO ✅');
+                        console.log('✅ TÚNEL NGROK CONFIGURADO ✅');
                         console.log('==========================================');
                         console.log(`🌍 URL Ngrok: ${publicUrl}`);
                         console.log(`🏠 URL Local: http://localhost:${PORT}`);
-                        console.log(`🌐 IP Directa: http://${PUBLIC_IP}:${PORT}`);
                         console.log('==========================================\n');
-                        console.log('📱 Usa cualquiera de estas URLs para conectar desde dispositivos\n');
+                        console.log('📱 Usa la URL de ngrok para acceso externo\n');
                     } else {
                         console.log('⚠️  NGROK NO DISPONIBLE (probablemente ya está en uso)');
                         console.log('==========================================');
-                        console.log(`🌐 Acceso por IP: http://${PUBLIC_IP}:${PORT}`);
-                        console.log(`🏠 URL Local: http://localhost:${PORT}`);
+                        console.log(`🌐 Acceso: ${ACCESS_URL}`);
+                        console.log(`🏠 Local: http://localhost:${PORT}`);
                         console.log('==========================================\n');
-                        console.log('💡 Puedes usar la IP pública si el puerto está abierto en firewall\n');
                     }
                 } catch (ngrokError) {
                     console.error('❌ Error iniciando ngrok:', ngrokError.message);
                     console.log('==========================================');
-                    console.log(`🌐 Acceso por IP: http://${PUBLIC_IP}:${PORT}`);
+                    console.log(`🌐 Acceso: ${ACCESS_URL}`);
                     console.log(`🏠 Local: http://localhost:${PORT}`);
                     console.log('==========================================\n');
                 }
-            } else {
-                console.log('⚠️  No se encontró token de ngrok');
+            } else if (IS_AWS) {
+                console.log('📡 Servidor AWS - Sin ngrok (acceso directo por IP)');
                 console.log('==========================================');
-                console.log(`🌐 Acceso por IP: http://${PUBLIC_IP}:${PORT}`);
-                console.log(`🏠 Local: http://localhost:${PORT}`);
+                console.log(`🌐 URL Pública: ${ACCESS_URL}`);
                 console.log('==========================================\n');
             }
         });
