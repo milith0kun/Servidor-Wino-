@@ -182,25 +182,32 @@ async function detectPublicIP() {
     }
 }
 
+// Variable global para almacenar el listener de ngrok
+let ngrokListener = null;
+
 // Función para inicializar ngrok automáticamente
 async function initializeNgrok() {
     try {
         console.log('🔄 Configurando túnel ngrok...');
         
-        // Desconectar cualquier túnel existente primero
-        try {
-            await ngrok.disconnect();
-        } catch (e) {
-            // Ignorar si no hay túneles activos
+        // Desconectar cualquier túnel existente de ESTE proceso
+        if (ngrokListener) {
+            try {
+                console.log('🔌 Desconectando túnel anterior...');
+                await ngrokListener.close();
+                ngrokListener = null;
+            } catch (e) {
+                console.log('⚠️  No se pudo cerrar túnel anterior:', e.message);
+            }
         }
         
-        // Configuración del túnel
+        // Configuración del túnel - NO usar dominio para evitar conflictos
         const forwardConfig = {
             addr: PORT,
             authtoken: NGROK_TOKEN
         };
         
-        // Si hay un dominio estático configurado, usarlo
+        // Si hay un dominio estático configurado, usarlo (solo con plan de pago)
         if (NGROK_DOMAIN) {
             forwardConfig.domain = NGROK_DOMAIN;
             console.log(`📌 Usando dominio estático: ${NGROK_DOMAIN}`);
@@ -209,9 +216,9 @@ async function initializeNgrok() {
         }
         
         // Crear el túnel con el nuevo SDK de ngrok
-        const listener = await ngrok.forward(forwardConfig);
+        ngrokListener = await ngrok.forward(forwardConfig);
         
-        const url = listener.url();
+        const url = ngrokListener.url();
         
         console.log('\n🌐 ¡NGROK CONFIGURADO EXITOSAMENTE! 🌐');
         console.log('================================================');
@@ -306,13 +313,19 @@ const startServer = async () => {
         // Configurar cierre elegante
         const gracefulShutdown = async () => {
             console.log('\n🛑 Cerrando servidor...');
-            try {
-                await ngrok.disconnect();
-                console.log('✅ Ngrok cerrado');
-            } catch (error) {
-                console.log('⚠️  Error cerrando ngrok:', error.message);
+            
+            // Cerrar túnel ngrok si existe
+            if (ngrokListener) {
+                try {
+                    console.log('🔌 Cerrando túnel ngrok...');
+                    await ngrokListener.close();
+                    console.log('✅ Ngrok cerrado');
+                } catch (error) {
+                    console.log('⚠️  Error cerrando ngrok:', error.message);
+                }
             }
             
+            // Cerrar servidor HTTP
             server.close(() => {
                 console.log('✅ Servidor cerrado correctamente');
                 process.exit(0);
