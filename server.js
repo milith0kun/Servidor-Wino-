@@ -307,15 +307,11 @@ const startServer = async () => {
         // Detectar IP pública y entorno automáticamente
         PUBLIC_IP = await detectPublicIP();
         
-        // Configurar puerto según el entorno - SIN redirecciones
-        // AWS: usa puerto 80 directamente (Node.js tiene permisos con setcap)
-        // LOCAL: usa puerto 3000
-        if (IS_AWS && !process.env.PORT) {
-            PORT = 80;
-            console.log('🔧 Puerto configurado automáticamente: 80 (AWS - directo)');
-        } else if (!IS_AWS && !process.env.PORT) {
+        // Configurar puerto según el entorno
+        // Siempre usa puerto 3000 (en AWS iptables redirige 80->3000 automáticamente)
+        if (!process.env.PORT) {
             PORT = 3000;
-            console.log('🔧 Puerto configurado automáticamente: 3000 (LOCAL)');
+            console.log(`🔧 Puerto configurado: 3000 ${IS_AWS ? '(AWS: puerto 80 redirige aquí)' : '(LOCAL)'}`);
         }
         
         DETECTED_PORT = PORT;
@@ -327,17 +323,20 @@ const startServer = async () => {
         // Iniciar servidor en HOST y PORT configurados
         const server = app.listen(PORT, HOST, async () => {
             const ENVIRONMENT = IS_AWS ? 'AWS' : 'LOCAL';
-            const ACCESS_URL = `http://${PUBLIC_IP}${PORT === 80 ? '' : ':' + PORT}`;
+            // En AWS, el acceso público es por puerto 80 (iptables redirige automáticamente)
+            const PUBLIC_URL = IS_AWS ? `http://${PUBLIC_IP}` : `http://${PUBLIC_IP}:${PORT}`;
             
             console.log(`\n🚀 SERVIDOR HACCP WINO INICIADO! 🚀`);
             console.log('==========================================');
             console.log(`📍 Entorno: ${ENVIRONMENT}`);
-            console.log(`🏠 Servidor: ${HOST}:${PORT}`);
+            console.log(`🏠 Servidor Interno: ${HOST}:${PORT}`);
             console.log(`🌐 IP Pública: ${PUBLIC_IP}`);
-            console.log(`🔌 Puerto: ${PORT} ${IS_AWS ? '(directo, sin redirección)' : ''}`);
-            console.log(`🌍 URL Acceso: ${ACCESS_URL}`);
+            if (IS_AWS) {
+                console.log(`� Redirección Automática: Puerto 80 → ${PORT}`);
+            }
+            console.log(`🌍 URL Pública: ${PUBLIC_URL}`);
             console.log(`🏥 Node ENV: ${process.env.NODE_ENV || 'development'}`);
-            console.log(`📋 Health: ${ACCESS_URL}/health`);
+            console.log(`📋 Health: ${PUBLIC_URL}/health`);
             console.log('==========================================\n');
             
             // Configurar ngrok automáticamente (solo en LOCAL)
@@ -354,21 +353,21 @@ const startServer = async () => {
                     } else {
                         console.log('⚠️  NGROK NO DISPONIBLE (probablemente ya está en uso)');
                         console.log('==========================================');
-                        console.log(`🌐 Acceso: ${ACCESS_URL}`);
+                        console.log(`🌐 Acceso: ${PUBLIC_URL}`);
                         console.log(`🏠 Local: http://localhost:${PORT}`);
                         console.log('==========================================\n');
                     }
                 } catch (ngrokError) {
                     console.error('❌ Error iniciando ngrok:', ngrokError.message);
                     console.log('==========================================');
-                    console.log(`🌐 Acceso: ${ACCESS_URL}`);
+                    console.log(`🌐 Acceso: ${PUBLIC_URL}`);
                     console.log(`🏠 Local: http://localhost:${PORT}`);
                     console.log('==========================================\n');
                 }
             } else if (IS_AWS) {
-                console.log('📡 Servidor AWS - Sin ngrok (acceso directo por IP)');
+                console.log('📡 Servidor AWS - Acceso directo (iptables gestiona puerto 80)');
                 console.log('==========================================');
-                console.log(`🌐 URL Pública: ${ACCESS_URL}`);
+                console.log(`🌐 URL Pública: ${PUBLIC_URL}`);
                 console.log('==========================================\n');
             }
         });
