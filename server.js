@@ -307,14 +307,15 @@ const startServer = async () => {
         // Detectar IP pública y entorno automáticamente
         PUBLIC_IP = await detectPublicIP();
         
-        // Configurar puerto según el entorno
-        // En AWS usamos puerto 3000 interno con iptables redirigiendo del 80 al 3000
+        // Configurar puerto según el entorno - SIN redirecciones
+        // AWS: usa puerto 80 directamente (Node.js tiene permisos con setcap)
+        // LOCAL: usa puerto 3000
         if (IS_AWS && !process.env.PORT) {
-            PORT = 3000;
-            console.log('🔧 Puerto interno: 3000 (iptables redirige 80 -> 3000)');
+            PORT = 80;
+            console.log('🔧 Puerto configurado automáticamente: 80 (AWS - directo)');
         } else if (!IS_AWS && !process.env.PORT) {
             PORT = 3000;
-            console.log('🔧 Puerto configurado automáticamente a 3000 (LOCAL)');
+            console.log('🔧 Puerto configurado automáticamente: 3000 (LOCAL)');
         }
         
         DETECTED_PORT = PORT;
@@ -326,16 +327,14 @@ const startServer = async () => {
         // Iniciar servidor en HOST y PORT configurados
         const server = app.listen(PORT, HOST, async () => {
             const ENVIRONMENT = IS_AWS ? 'AWS' : 'LOCAL';
-            // En AWS, mostramos puerto 80 al usuario (iptables hace la redirección)
-            const PUBLIC_PORT = IS_AWS ? 80 : PORT;
-            const ACCESS_URL = `http://${PUBLIC_IP}${PUBLIC_PORT === 80 ? '' : ':' + PUBLIC_PORT}`;
+            const ACCESS_URL = `http://${PUBLIC_IP}${PORT === 80 ? '' : ':' + PORT}`;
             
             console.log(`\n🚀 SERVIDOR HACCP WINO INICIADO! 🚀`);
             console.log('==========================================');
             console.log(`📍 Entorno: ${ENVIRONMENT}`);
-            console.log(`🏠 Host: ${HOST}:${PORT} (interno)`);
+            console.log(`🏠 Servidor: ${HOST}:${PORT}`);
             console.log(`🌐 IP Pública: ${PUBLIC_IP}`);
-            console.log(`🔌 Puerto Público: ${PUBLIC_PORT}${IS_AWS ? ' (redirigido desde 80)' : ''}`);
+            console.log(`🔌 Puerto: ${PORT} ${IS_AWS ? '(directo, sin redirección)' : ''}`);
             console.log(`🌍 URL Acceso: ${ACCESS_URL}`);
             console.log(`🏥 Node ENV: ${process.env.NODE_ENV || 'development'}`);
             console.log(`📋 Health: ${ACCESS_URL}/health`);
