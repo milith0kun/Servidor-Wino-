@@ -52,26 +52,8 @@ async function detectEnvironment() {
 
 // Función para detectar puerto disponible automáticamente
 async function detectAvailablePort() {
-    const net = require('net');
-    
-    // Intentar usar puerto 80 (estándar HTTP)
-    const isAvailable = await new Promise((resolve) => {
-        const testServer = net.createServer();
-        
-        testServer.once('error', () => resolve(false));
-        testServer.once('listening', () => {
-            testServer.close();
-            resolve(true);
-        });
-        
-        testServer.listen(80, '0.0.0.0');
-    });
-    
-    if (isAvailable) {
-        return 80;
-    }
-    
-    // Si 80 no está disponible, usar 3000
+    // Usar puerto 3000 siempre - simple y funcional
+    // En producción, usar proxy inverso (nginx) o load balancer para puerto 80
     return 3000;
 }
 
