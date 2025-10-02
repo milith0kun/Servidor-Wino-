@@ -130,11 +130,17 @@ async function initializeNgrok() {
     try {
         console.log('🔄 Configurando túnel ngrok...');
         
-        // Crear el túnel con el nuevo SDK de ngrok
+        // Desconectar cualquier túnel existente primero
+        try {
+            await ngrok.disconnect();
+        } catch (e) {
+            // Ignorar si no hay túneles activos
+        }
+        
+        // Crear el túnel con el nuevo SDK de ngrok (sin dominio fijo para evitar conflictos)
         const listener = await ngrok.forward({
             addr: PORT,
-            authtoken: NGROK_TOKEN,
-            proto: 'http'
+            authtoken: NGROK_TOKEN
         });
         
         const url = listener.url();
@@ -148,7 +154,7 @@ async function initializeNgrok() {
         
         return url;
     } catch (error) {
-        console.error('❌ Error configurando ngrok:', error);
+        console.error('❌ Error configurando ngrok:', error.message);
         console.log('⚠️  Continuando sin túnel público...');
         return null;
     }
